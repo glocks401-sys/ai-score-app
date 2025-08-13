@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Scoring Results</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 2rem auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      margin-top: 0;
+      color: #333;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+    }
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+    th {
+      background: #4CAF50;
+      color: white;
+      padding: 0.75rem;
+      text-align: left;
+    }
+    td {
+      padding: 0.75rem;
+      text-align: center;
+    }
+    .loading {
+      text-align: center;
+      margin-top: 2rem;
+      color: #777;
+    }
+    button {
+      display: block;
+      margin: 2rem auto 0;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Scoring Results</h1>
+    <div id="loading" class="loading">Scoring your text... Please wait.</div>
+    <table id="resultsTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Score (%)</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+    <button onclick="window.location.href='index.html'">Back to Home</button>
+  </div>
+
+  <script>
+    async function getScores() {
+      const params = new URLSearchParams(window.location.search);
+      const text = params.get("text");
+
+      if (!text) {
+        document.getElementById("loading").textContent = "No text provided.";
+        return;
+      }
+
+      const categories = [
+        "validity",
+        "fact check",
+        "hallucination",
+        "authenticity",
+        "unbiased response",
+        "secure",
+        "data privacy",
+        "ai generated text"
+      ];
+
+      try {
+        const response = await fetch("/.netlify/functions/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, categories }),
+        });
+
+        const data = await response.json();
+
+        if (!data.scores) {
+          document.getElementById("loading").textContent = "Error: " + (data.error || "Unknown error");
+          return;
+        }
+
+        const tbody = document.getElementById("resultsBody");
+        tbody.innerHTML = "";
+
+        for (const [category, score] of Object.entries(data.scores)) {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${category}</td><td>${score}</td>`;
+          tbody.appendChild(row);
+        }
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("resultsTable").style.display = "table";
+
+      } catch (err) {
+        document.getElementById("loading").textContent = "Request failed: " + err.message;
+      }
+    }
+
+    getScores();
+  </script>
+</body>
+</html>
