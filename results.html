@@ -1,137 +1,164 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AI Scoring Results</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Text Quality – Results</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f6f8;
-      margin: 0;
-      padding: 0;
+    :root {
+      --bg:#0b1020; --card:#121a32; --ink:#e6ecff; --muted:#9fb0e0; --accent:#6aa6ff;
     }
-    .container {
-      max-width: 800px;
-      margin: 2rem auto;
-      background: white;
-      padding: 2rem;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    h1 {
-      text-align: center;
-      margin-top: 0;
-      color: #333;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1.5rem;
-    }
-    table, th, td {
-      border: 1px solid #ddd;
-    }
-    th {
-      background: #4CAF50;
-      color: white;
-      padding: 0.75rem;
-      text-align: left;
-    }
-    td {
-      padding: 0.75rem;
-      text-align: center;
-    }
-    .loading {
-      text-align: center;
-      margin-top: 2rem;
-      color: #777;
-    }
-    button {
-      display: block;
-      margin: 2rem auto 0;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      background: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #45a049;
-    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:linear-gradient(180deg,#0b1020,#090e1b 60%);color:var(--ink)}
+    .wrap{max-width:1000px;margin:0 auto;padding:32px}
+    .card{background:var(--card);border:1px solid #223052;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden}
+    header{padding:20px 24px;border-bottom:1px solid #223052;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{font-size:20px;margin:0}
+    .meta{opacity:.8;font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;padding:24px}
+    .metric{padding:16px;border:1px solid #2a3b63;border-radius:16px}
+    .metric h3{margin:0 0 8px;font-size:14px;color:var(--muted)}
+    .bar{height:14px;border-radius:10px;background:#0e162d;border:1px solid #2a3b63;overflow:hidden}
+    .fill{height:100%;width:0%;background:linear-gradient(90deg,#5ea1ff,#8ab6ff);transition:width .6s ease}
+    .score{font-weight:700}
+    .text{padding:0 24px 24px}
+    .actions{display:flex;gap:10px;justify-content:flex-end;padding:0 24px 24px}
+    button{appearance:none;border:0;border-radius:12px;padding:11px 16px;font-weight:700;cursor:pointer}
+    .ghost{background:#182447;border:1px solid #2a3b63;color:var(--ink)}
+    .primary{background:linear-gradient(135deg,var(--accent),#8ab6ff);color:#0c1225}
+    .muted{opacity:.8}
+    pre{white-space:pre-wrap;background:#0e162d;border:1px solid #2a3b63;border-radius:14px;padding:14px;color:var(--ink)}
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>AI Scoring Results</h1>
-    <div id="loading" class="loading">Scoring your text... Please wait.</div>
-    <table id="resultsTable" style="display: none;">
-      <thead>
-        <tr>
-          <th>Category</th>
-          <th>Score (%)</th>
-        </tr>
-      </thead>
-      <tbody id="resultsBody"></tbody>
-    </table>
-    <button onclick="window.location.href='index.html'">Back to Home</button>
+  <div class="wrap">
+    <div class="card">
+      <header>
+        <div>
+          <h1>Scores</h1>
+          <div class="meta" id="meta"></div>
+        </div>
+        <div class="actions">
+          <button class="ghost" onclick="history.back()">← Edit Text</button>
+          <button class="primary" id="aiBtn">Re-score with AI</button>
+        </div>
+      </header>
+
+      <div class="text">
+        <div class="muted">Your text</div>
+        <pre id="userText"></pre>
+      </div>
+
+      <div class="grid" id="metrics"></div>
+
+      <div class="text muted" id="explain"></div>
+
+      <div class="text">
+        <details>
+          <summary>How are scores calculated?</summary>
+          <p>By default, local heuristics provide quick scores. Click <strong>Re-score with AI</strong> to call your serverless function using Hugging Face for more accurate evaluation.</p>
+        </details>
+      </div>
+    </div>
   </div>
 
   <script>
-    async function getScores() {
-      const params = new URLSearchParams(window.location.search);
-      const text = params.get("text");
+    const CATEGORIES = [
+      'validity','fact check','hallucination','authenticity',
+      'unbiased response','secure','data privacy','ai generated text'
+    ];
 
-      if (!text) {
-        document.getElementById("loading").textContent = "No text provided.";
-        return;
-      }
+    const metricsEl = document.getElementById('metrics');
+    const userTextEl = document.getElementById('userText');
+    const metaEl = document.getElementById('meta');
+    const explainEl = document.getElementById('explain');
 
-      const categories = [
-        "validity",
-        "fact check",
-        "hallucination",
-        "authenticity",
-        "unbiased response",
-        "secure",
-        "data privacy",
-        "ai generated text"
-      ];
-
+    function loadInput(){
       try {
-        const response = await fetch("/.netlify/functions/score", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, categories }),
-        });
-
-        const data = await response.json();
-
-        if (!data.scores) {
-          document.getElementById("loading").textContent = "Error: " + (data.error || "Unknown error");
-          return;
-        }
-
-        const tbody = document.getElementById("resultsBody");
-        tbody.innerHTML = "";
-
-        for (const [category, score] of Object.entries(data.scores)) {
-          const row = document.createElement("tr");
-          row.innerHTML = `<td>${category}</td><td>${score}</td>`;
-          tbody.appendChild(row);
-        }
-
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("resultsTable").style.display = "table";
-
-      } catch (err) {
-        document.getElementById("loading").textContent = "Request failed: " + err.message;
-      }
+        const raw = localStorage.getItem('score:input');
+        if(!raw) return null;
+        return JSON.parse(raw);
+      } catch(e){ return null; }
     }
 
-    getScores();
+    function createMetricRow(name){
+      const el = document.createElement('div');
+      el.className = 'metric';
+      el.innerHTML = `
+        <h3>${name}</h3>
+        <div class="bar"><div class="fill"></div></div>
+        <div class="score" aria-live="polite">0</div>
+      `;
+      return el;
+    }
+
+    function renderSkeleton(){
+      metricsEl.innerHTML = '';
+      CATEGORIES.forEach(cat=>{
+        metricsEl.appendChild(createMetricRow(cat));
+      });
+    }
+
+    function localHeuristicScore(text){
+      const len = text.length;
+      const scoreBase = Math.max(30, Math.min(95, Math.round(40 + Math.log10(Math.max(1,len))*15)));
+      return CATEGORIES.reduce((obj, cat) => {
+        obj[cat] = cat === 'hallucination' ? 100 - scoreBase : scoreBase;
+        return obj;
+      }, {});
+    }
+
+    function updateUI(scores){
+      const rows = metricsEl.querySelectorAll('.metric');
+      rows.forEach(row=>{
+        const name = row.querySelector('h3').textContent;
+        let value = scores[name];
+        if(name === 'hallucination'){ value = 100 - value; }
+        value = Math.max(0, Math.min(100, Math.round(value)));
+        row.querySelector('.fill').style.width = value + '%';
+        row.querySelector('.score').textContent = value + ' / 100';
+      });
+    }
+
+    async function scoreWithAI(text){
+      const res = await fetch('/.netlify/functions/score', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ text })
+      });
+      if(!res.ok) throw new Error('AI scoring failed');
+      return res.json();
+    }
+
+    const payload = loadInput();
+    if(!payload){
+      document.body.innerHTML = '<div class="wrap"><div class="card" style="padding:28px">No input found. Please go back to the input page.</div></div>';
+    } else {
+      renderSkeleton();
+      userTextEl.textContent = payload.text;
+      metaEl.textContent = `${payload.title || 'Untitled'} • ${new Date(payload.t).toLocaleString()}`;
+      const baseScores = localHeuristicScore(payload.text);
+      updateUI(baseScores);
+      explainEl.textContent = 'Local heuristic scores shown. Click "Re-score with AI" for Hugging Face evaluation.';
+
+      document.getElementById('aiBtn').addEventListener('click', async () => {
+        try {
+          const btn = document.getElementById('aiBtn');
+          btn.disabled = true;
+          btn.textContent = 'Scoring…';
+          const out = await scoreWithAI(payload.text);
+          updateUI(out.scores);
+          explainEl.textContent = out.explanation || 'AI scores applied.';
+        } catch(err) {
+          alert(err.message || 'Failed to score with AI');
+        } finally {
+          const btn = document.getElementById('aiBtn');
+          btn.disabled = false;
+          btn.textContent = 'Re-score with AI';
+        }
+      });
+    }
   </script>
 </body>
 </html>
